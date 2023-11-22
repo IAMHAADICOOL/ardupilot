@@ -113,7 +113,7 @@ bool AP_Baro_MS56XX::_init()
         break;
     case BARO_MS5837:
         name = "MS5837";
-        prom_read_ok = _read_prom_5637(prom);
+        prom_read_ok = _read_prom_5837(prom);
         break;
     case BARO_MS5637:
         name = "MS5637";
@@ -228,6 +228,38 @@ bool AP_Baro_MS56XX::_read_prom_5611(uint16_t prom[8])
 }
 
 bool AP_Baro_MS56XX::_read_prom_5637(uint16_t prom[8])
+{
+    /*
+     * MS5637-02BA03 datasheet, CYCLIC REDUNDANCY CHECK (CRC): "MS5637
+     * contains a PROM memory with 112-Bit. A 4-bit CRC has been implemented
+     * to check the data validity in memory."
+     *
+     * 8th PROM word must be zeroed and CRC field removed for CRC-4
+     * calculation.
+     */
+    bool all_zero = true;
+    for (uint8_t i = 0; i < 7; i++) {
+        prom[i] = _read_prom_word(i);
+        if (prom[i] != 0) {
+            all_zero = false;
+        }
+    }
+
+    if (all_zero) {
+        return false;
+    }
+
+    prom[7] = 0;
+
+    /* save the read crc */
+    const uint16_t crc_read = (prom[0] & 0xf000) >> 12;
+
+    /* remove CRC byte */
+    prom[0] &= ~0xf000;
+
+    return crc_read == crc_crc4(prom);
+}
+bool AP_Baro_MS56XX::_read_prom_5837(uint16_t prom[8])
 {
     /*
      * MS5637-02BA03 datasheet, CYCLIC REDUNDANCY CHECK (CRC): "MS5637
